@@ -2,6 +2,7 @@ import numpy as np
 from scipy.sparse import coo_matrix, diags
 import ngsolve as ngs
 from ngsolve.meshes import MakeQuadMesh
+import torch
 
 def poisson_gene(nx: int, ny: int):
     """
@@ -61,6 +62,12 @@ def normal_like(b, seed=None):
     rng = np.random.default_rng(seed)
     return rng.normal(loc=0.0, scale=1.0, size=b.shape).astype(b.dtype)
 
+def gen_vec(dim, samples, A):
+    w = torch.randn(samples, dim)
+    v = torch.matmul(w, torch.tensor(A.toarray()).float().t())
+    print("w is", w)
+    print("v is", v)
+    return None
 
 if __name__ == '__main__':
     A, b = poisson_gene(
@@ -81,3 +88,4 @@ if __name__ == '__main__':
     # Then, for example, export to a `.mat` file
     # ...
     print(normal_like(b))
+    gen_vec(len(b), 1, A)
