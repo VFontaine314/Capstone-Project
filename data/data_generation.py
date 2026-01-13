@@ -65,9 +65,7 @@ def normal_like(b, seed=None):
 def gen_vec(dim, samples, A):
     w = torch.randn(samples, dim)
     v = torch.matmul(w, torch.tensor(A.toarray()).float().t())
-    print("w is", w)
-    print("v is", v)
-    return None
+    return v, w
 
 if __name__ == '__main__':
     A, b = poisson_gene(
@@ -77,15 +75,15 @@ if __name__ == '__main__':
         ny=4
     )
 
-    print(f"{type(A) = }")
-    print(f"{type(b) = }")
-    print(f"{A.shape = }")
-    print(f"{b.shape = }")
+    # print(f"{type(A) = }")
+    # print(f"{type(b) = }")
+    # print(f"{A.shape = }")
+    # print(f"{b.shape = }")
 
     np.set_printoptions(linewidth=200)
-    print(f"{A.todense() = }")
+    # print(f"{A.todense() = }")
 
     # Then, for example, export to a `.mat` file
     # ...
-    print(normal_like(b))
-    gen_vec(len(b), 1, A)
+    # print(normal_like(b))
+    gen_vec(len(b), 3, A)
