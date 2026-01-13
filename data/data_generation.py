@@ -56,6 +56,12 @@ def _applyBC_export_data(a, f, fes):
 
     return A, b
 
+def normal_like(b, seed=None):
+
+    rng = np.random.default_rng(seed)
+    return rng.normal(loc=0.0, scale=1.0, size=b.shape).astype(b.dtype)
+
+
 if __name__ == '__main__':
     A, b = poisson_gene(
         # nx=10,
@@ -74,3 +80,4 @@ if __name__ == '__main__':
 
     # Then, for example, export to a `.mat` file
     # ...
+    print(normal_like(b))
