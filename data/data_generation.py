@@ -64,7 +64,8 @@ def normal_like(b, seed=None):
 
 def gen_vec(dim, samples, A):
     w = torch.randn(samples, dim)
-    v = torch.matmul(w, torch.tensor(A.toarray()).float().t())
+    A_torch = torch.tensor(A.toarray(), dtype=w.dtype, device=w.device)
+    v = torch.matmul(w, A_torch.t())
     return v, w
 
 if __name__ == '__main__':
