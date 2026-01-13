@@ -21,7 +21,8 @@ for _ in range(10):
 
 model = nf.NormalizingFlow(base, flows).to(device)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+optimizer = torch.optim.Adam(model.parameters(), lr
+=1e-4)
 mse = nn.MSELoss()
 
 # Training loop
