@@ -26,8 +26,8 @@ optimizer = torch.optim.Adam(model.parameters(), lr
 mse = nn.MSELoss()
 
 # Training loop
-epoch_size = 32
-n_epochs = 2000
+epoch_size = 100
+n_epochs = 10000
 losses = []
 for epoch in range(n_epochs):
     x = torch.rand(epoch_size, dim, device=device)
@@ -47,8 +47,8 @@ for epoch in range(n_epochs):
     loss.backward()
     optimizer.step()
 
-    if (epoch + 1) % 100 == 0:
-        print(f"Epoch {epoch+1}/{n_epochs}, MSE Loss: {loss.item():.6f}")
+    if (epoch + 1) % 1000 == 0:
+        print(f"Epoch {epoch+1}/{n_epochs}, MSE Loss: {loss.item():.10f}")
 
 
 
