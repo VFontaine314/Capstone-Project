@@ -114,4 +114,10 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model, random_state=0):
     print("*" * 20)
 
 
+if __name__ == "__main__":
+    n = 4
+    print(f"Generating Poisson Matrix ({n}x{n})...")
+    A, b = poisson_gene(nx=n, ny=n)
+    x, i = apply(A, b, mode = "Jacobi", model=None, epsilon=0.000001, max_iter=1000, random_state=0)
+    print(x)
 
