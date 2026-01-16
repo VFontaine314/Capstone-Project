@@ -42,10 +42,6 @@ class AffineCoupling(nn.Module):
         self.n_split = dim // 2
         self.n_keep = dim - self.n_split
         
-        # If flip is False: Top (keep) updates Bottom (split)
-        # If flip is True:  Bottom (keep) updates Top (split)
-        
-        # We define input/output dims based on what part is being fed into the net
         if not self.flip:
             net_in = self.n_split
             net_out = self.n_keep
@@ -92,9 +88,9 @@ class SupervisedINN(nn.Module):
 # --- Main Execution ---
 if __name__ == "__main__":
     # Config
-    NX, NY = 4, 4
+    NX, NY = 11, 11
     SAMPLES = 20000      
-    LAYERS = 8
+    LAYERS = 4
     HIDDEN = 256
     EPOCHS = 100
     LR = 1e-3
@@ -134,7 +130,7 @@ if __name__ == "__main__":
     loss_fn = nn.MSELoss()
 
     # --- Training ---
-    print("Starting Supervised Training (Forward Only)...")
+    print("Starting Supervised Training...")
     model.train()
     for epoch in range(EPOCHS):
         total_loss = 0.0
