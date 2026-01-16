@@ -62,7 +62,7 @@ class SupervisedINN(nn.Module):
 # --- Main Execution ---
 if __name__ == "__main__":
     # Config
-    NX, NY = 10, 10
+    NX, NY = 4, 4
     SAMPLES = 20000      
     LAYERS = 8
     HIDDEN = 256

@@ -82,9 +82,10 @@ if __name__ == '__main__':
     # print(f"{b.shape = }")
 
     np.set_printoptions(linewidth=200)
-    # print(f"{A.todense() = }")
+    print(f"{A.todense() = }")
 
     # Then, for example, export to a `.mat` file
     # ...
     # print(normal_like(b))
-    gen_vec(len(b), 3, A)
+    #gen_vec(len(b), 3, A)
+    print(A)

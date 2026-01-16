@@ -4,7 +4,7 @@ import torch.nn as nn
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-dim = 4
+dim = 25
 
 # Random linear transformation
 A = torch.rand(dim, dim, device=device)
@@ -21,8 +21,7 @@ for _ in range(10):
 
 model = nf.NormalizingFlow(base, flows).to(device)
 
-optimizer = torch.optim.Adam(model.parameters(), lr
-=1e-4)
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 mse = nn.MSELoss()
 
 # Training loop
