@@ -1,4 +1,6 @@
 import torch
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from data.data_generation import poisson_gene, gen_vec
 
 import time
 class Stopwatch:
@@ -64,10 +66,10 @@ def apply(A, b, mode, model=None, epsilon=0.000001, max_iter=1000, random_state=
 
 
 def comparing(n, num_epochs_INN, num_epochs_NN, model, random_state=0):
-    A, b = torch.rand((n, n)), torch.rand(n) #generate A and b here
 
     #put A and b in right format - start
-
+    print(f"Generating Poisson Matrix ({n}x{n})...")
+    A, b = poisson_gene(nx=n, ny=n)
 
 
     #put A and b in right format - stop
