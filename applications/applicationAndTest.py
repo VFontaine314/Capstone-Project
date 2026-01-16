@@ -140,7 +140,7 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     print("comparison complete")
     print("STATS")
     print("*"*20)
-    print("INN - Jacobi - Gauss")
+    print("model: INN - Jacobi - Gauss")
     print(f"time: {time_INN:.4f} - {time_jacobi:.4f} - {time_gauss:.4f}")
     print(f"num_iter: {num_iter_INN} - {num_iter_jacobi} - {num_iter_gauss}")
 
