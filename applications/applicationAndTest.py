@@ -6,8 +6,9 @@ import sys
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from data.data_generation import poisson_gene
-from models.model_supervised import train_supervised_inn, train_supervised_mlp
+from data.data_generation import poisson_gene, diffusion_gene, heat_gene
+from models.model_supervised import train_supervised_inn
+from models.model_unsupervised import train_unsupervised_inn
 class Stopwatch:
     def __init__(self):
         self.start_time = None
@@ -87,7 +88,7 @@ def apply(
 
 
 def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
-    nx = int(math.sqrt(n))
+    nx = n
     ny = nx
     if nx * ny != n:
         nx = n
@@ -105,17 +106,31 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     stopwatch = Stopwatch()
 
     #note x, number of iterations and time of INN
-    model_inn, v_mean_inn, v_std_inn, _ = train_supervised_inn(
+
+    model_sup, v_mean_sup, v_std_sup, _ = train_supervised_inn(
         nx=nx,
         ny=ny,
         epochs=num_epochs_INN,
     )
     stopwatch.start()
-    x_INN, num_iter_INN = apply(
-        A, b, 'inn', model_inn, v_mean=v_mean_inn, v_std=v_std_inn
-    )
+
+    x_INN_sup, num_iter_INN_sup = apply(A, b, 'INN', model_sup, v_mean=v_mean_sup, v_std=v_std_sup)
+
     stopwatch.stop()
-    time_INN = stopwatch.elapsed_time
+    time_INN_sup = stopwatch.elapsed_time
+    stopwatch.reset()
+
+
+
+    model_unsup, v_mean_unsup, v_std_unsup, _ = train_unsupervised_inn(
+        nx=nx,
+        ny=ny,
+        epochs=num_epochs_INN,
+    )
+    stopwatch.start()
+    x_INN_unsup, num_iter_INN_unsup = apply(A, b, 'INN', model_unsup, v_mean=v_mean_unsup, v_std=v_std_unsup)
+    stopwatch.stop()
+    time_INN_unsup = stopwatch.elapsed_time
     stopwatch.reset()
 
     # model_mlp, v_mean_mlp, v_std_mlp, _ = train_supervised_mlp(
@@ -148,16 +163,12 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     print("comparison complete")
     print("STATS")
     print("*"*20)
-    print("model: supervised - unsupervised - Jacobi - Gauss")
-    print(
-        f"time: {time_INN:.4f} - {time_jacobi:.4f} - {time_gauss:.4f}"
-    )
-    print(
-        f"num_iter: {num_iter_INN} - {num_iter_jacobi} - {num_iter_gauss}"
-    )
+    print("model: supercvised INN - unsupervised INN - Jacobi - Gauss")
+    print(f"time: {time_INN_sup:.4f} - {time_INN_unsup:.4f} - {time_jacobi:.4f} - {time_gauss:.4f}")
+    print(f"num_iter: {num_iter_INN_sup} - {num_iter_INN_unsup} - {num_iter_jacobi} - {num_iter_gauss}")
 
 
 if __name__ == "__main__":
-    comparing(n=400, num_epochs_INN=10, num_epochs_NN=10)
+    comparing(n=11, num_epochs_INN=10, num_epochs_NN=0)
     print("*" * 20)
 
