@@ -1,11 +1,14 @@
-import os
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-import torch
-import sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from data.data_generation import poisson_gene, gen_vec
 
+import torch
 import time
+import math
+import os
+import sys
+
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from data.data_generation import poisson_gene
+from models.model_supervised import train_supervised_inn
 class Stopwatch:
     def __init__(self):
         self.start_time = None
@@ -43,36 +46,61 @@ class Stopwatch:
         print(f"Tijd: {current_time:.2f} seconden")
 
 
-def apply(A, b, mode, model=None, epsilon=0.000001, max_iter=1000, random_state=0):
+def apply(
+    A,
+    b,
+    mode,
+    model=None,
+    v_mean=None,
+    v_std=None,
+    epsilon=0.000001,
+    max_iter=10000,
+    random_state=0,
+):
     torch.manual_seed(random_state)
     n, h = A.shape
-    x_kplusone = torch.rand(n)
-    x_k = torch.rand(n)
+    x_kplusone = torch.rand(n, dtype=A.dtype)
+    x_k = torch.rand(n, dtype=A.dtype)
     i = 0
+    mode = mode.lower()
+    resids = []
     while (torch.dist(x_kplusone, x_k) > epsilon and i < max_iter):
         x_k = x_kplusone
-        resid = A * x_kplusone - b
+        resid = A @ x_kplusone - b
+        resids.append(resid)
         gamma = torch.rand(n)
-        if mode == 'INN':
+        if mode == 'inn':
+            resid_norm = (resid.unsqueeze(0) - v_mean) / v_std
+            gamma = model.forward(resid_norm).squeeze(0)
+        elif mode == 'nn':
             gamma = model.forward(resid)
-        elif mode == 'NN':
-            gamma = model.forward(resid)
-        elif mode == 'Jacobi':
+        elif mode == 'jacobi':
             gamma = torch.diagonal(A) * resid
         elif mode == 'gauss':
-            gamma = torch.diagonal(A, offset=-1) * torch.diagonal(A) * resid
+            diag = torch.diagonal(A)
+            lower = torch.diagonal(A, offset=-1)
+            gamma = diag * resid
+            # Use lower diagonal contribution where it exists.
+            gamma[1:] += lower * resid[:-1]
 
         x_kplusone = x_k + gamma
         i += 1
 
-    return x_kplusone, i
+    return x_kplusone, i, resids
 
 
-def comparing(n, num_epochs_INN, num_epochs_NN, model, random_state=0):
+def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
+    nx = int(math.sqrt(n))
+    ny = nx
+    if nx * ny != n:
+        nx = n
+        ny = 1
+    A_scipy, b_np = poisson_gene(nx=nx, ny=ny)
+    A = torch.tensor(A_scipy.toarray(), dtype=torch.float64)
+    b = torch.tensor(b_np, dtype=torch.float64)
 
     #put A and b in right format - start
-    print(f"Generating Poisson Matrix ({n}x{n})...")
-    A, b = poisson_gene(nx=n, ny=n)
+
 
 
     #put A and b in right format - stop
@@ -80,11 +108,17 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model, random_state=0):
     stopwatch = Stopwatch()
 
     #note x, number of iterations and time of INN
-    stopwatch.start
-    x_INN, num_iter_INN = apply(A, b, 'INN', model)
-    stopwatch.stop
+    model, v_mean, v_std, _ = train_supervised_inn(
+        nx=nx,
+        ny=ny,
+        epochs=num_epochs_INN,
+    )
+    stopwatch.start()
+    
+    x_INN, num_iter_INN, resids = apply(A, b, 'INN', model, v_mean=v_mean, v_std=v_std)
+    stopwatch.stop()
     time_INN = stopwatch.elapsed_time
-    stopwatch.reset
+    stopwatch.reset()
 
     #note x, number of iterations and time of NN
     #stopwatch.start
@@ -95,32 +129,30 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model, random_state=0):
     #stopwatch.reset
 
     #note x, number of iterations and time of Jacobi preconditioner
-    stopwatch.start
-    x_jacobi, num_iter_jacobi = apply(A, b, 'jacobi')
-    stopwatch.stop
+    stopwatch.start()
+    x_jacobi, num_iter_jacobi, resids = apply(A, b, 'jacobi')
+    stopwatch.stop()
     time_jacobi = stopwatch.elapsed_time
-    stopwatch.reset
+    stopwatch.reset()
 
     #note x, number of iterations and time of Gauss preconditioner
-    stopwatch.start
-    x_gauss, num_iter_gauss = apply(A, b, model, 'gauss')
-    stopwatch.stop
+    stopwatch.start()
+    x_gauss, num_iter_gauss, resids = apply(A, b, 'gauss')
+    stopwatch.stop()
     time_gauss = stopwatch.elapsed_time
-    stopwatch.reset
+    stopwatch.reset()
 
     print("comparison complete")
     print("STATS")
     print("*"*20)
-    print("INN - Jacobi - Gauss")
-    print("time: " + time_INN + " - " + time_jacobi + " - " + time_gauss)
-    print("num_iter: " + num_iter_INN + " - " + num_iter_jacobi + " - " + num_iter_gauss)
-    print("*" * 20)
+    print("model: INN - Jacobi - Gauss")
+    print(f"time: {time_INN:.4f} - {time_jacobi:.4f} - {time_gauss:.4f}")
+    print(f"num_iter: {num_iter_INN} - {num_iter_jacobi} - {num_iter_gauss}")
+    print(f"Difference: INN-jacobi: " )
 
 
 if __name__ == "__main__":
-    n = 4
-    print(f"Generating Poisson Matrix ({n}x{n})...")
-    A, b = poisson_gene(nx=n, ny=n)
-    x, i = apply(A, b, mode = "Jacobi", model=None, epsilon=0.000001, max_iter=1000, random_state=0)
-    print(x)
+    comparing(n=32, num_epochs_INN=2, num_epochs_NN=0)
+    print("*" * 20)
+
 
