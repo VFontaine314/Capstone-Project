@@ -86,7 +86,7 @@ Supervised INN:
 
     -> Double precision (float64) throughout
 
-   -> This model preserves invertibility structure while being trained purely in a supervised fashion.
+    -> This model preserves invertibility structure while being trained purely in a supervised fashion.
 
 Unsupervised INN:
 
