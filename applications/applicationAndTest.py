@@ -6,7 +6,7 @@ import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from data.data_generation import poisson_gene
-from models.model_supervised import train_supervised_inn
+from models.model_supervised import train_supervised_inn, train_supervised_mlp
 class Stopwatch:
     def __init__(self):
         self.start_time = None
@@ -65,7 +65,7 @@ def apply(
         x_k = x_kplusone
         resid = A @ x_kplusone - b
         gamma = torch.rand(n)
-        if mode == 'inn':
+        if mode == 'inn' or mode == 'mlp':
             resid_norm = (resid.unsqueeze(0) - v_mean) / v_std
             gamma = model.forward(resid_norm).squeeze(0)
         elif mode == 'nn':
@@ -104,24 +104,31 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     stopwatch = Stopwatch()
 
     #note x, number of iterations and time of INN
-    model, v_mean, v_std, _ = train_supervised_inn(
+    model_inn, v_mean_inn, v_std_inn, _ = train_supervised_inn(
         nx=nx,
         ny=ny,
         epochs=num_epochs_INN,
     )
     stopwatch.start()
-    x_INN, num_iter_INN = apply(A, b, 'INN', model, v_mean=v_mean, v_std=v_std)
+    x_INN, num_iter_INN = apply(
+        A, b, 'inn', model_inn, v_mean=v_mean_inn, v_std=v_std_inn
+    )
     stopwatch.stop()
     time_INN = stopwatch.elapsed_time
     stopwatch.reset()
 
-    #note x, number of iterations and time of NN
-    #stopwatch.start
-    #model = train_NN(A, num_epochs_NN)
-    #x_NN, num_iter_NN = apply(A, b, 'NN', model)
-    #stopwatch.stop
-    #time_NN = stopwatch.elapsed_time
-    #stopwatch.reset
+    # model_mlp, v_mean_mlp, v_std_mlp, _ = train_supervised_mlp(
+    #     nx=nx,
+    #     ny=ny,
+    #     epochs=num_epochs_NN,
+    # )
+    # stopwatch.start()
+    # x_MLP, num_iter_MLP = apply(
+    #     A, b, 'mlp', model_mlp, v_mean=v_mean_mlp, v_std=v_std_mlp
+    # )
+    # stopwatch.stop()
+    # time_MLP = stopwatch.elapsed_time
+    # stopwatch.reset()
 
     #note x, number of iterations and time of Jacobi preconditioner
     stopwatch.start()
@@ -140,14 +147,16 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     print("comparison complete")
     print("STATS")
     print("*"*20)
-    print("model: INN - Jacobi - Gauss")
-    print(f"time: {time_INN:.4f} - {time_jacobi:.4f} - {time_gauss:.4f}")
-    print(f"num_iter: {num_iter_INN} - {num_iter_jacobi} - {num_iter_gauss}")
+    print("model: supervised - unsupervised - Jacobi - Gauss")
+    print(
+        f"time: {time_INN:.4f} - {time_jacobi:.4f} - {time_gauss:.4f}"
+    )
+    print(
+        f"num_iter: {num_iter_INN} - {num_iter_jacobi} - {num_iter_gauss}"
+    )
 
 
 if __name__ == "__main__":
-    comparing(n=16, num_epochs_INN=10, num_epochs_NN=0)
+    comparing(n=400, num_epochs_INN=10, num_epochs_NN=10)
     print("*" * 20)
-
-
 
