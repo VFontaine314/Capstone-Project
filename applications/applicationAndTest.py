@@ -4,6 +4,7 @@ import math
 import os
 import sys
 
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from data.data_generation import poisson_gene
 from models.model_supervised import train_supervised_inn, train_supervised_mlp

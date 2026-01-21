@@ -4,6 +4,59 @@ import ngsolve as ngs
 from ngsolve.meshes import MakeQuadMesh
 import torch
 
+
+def heat_gene(nx: int, ny: int, dt: float = 0.001):
+    """
+    Generate data for 2D heat equation (one backward Euler step).
+    Same structure as poisson_gene.
+    """
+    mesh = MakeQuadMesh(nx=nx, ny=ny)
+
+    fes = ngs.H1(mesh, order=1, dirichlet=".*")
+
+    u, v = fes.TrialFunction(), fes.TestFunction()
+
+    # (1/dt) * mass + stiffness
+    a = ngs.BilinearForm(
+        (1.0 / dt) * u * v * ngs.dx +
+        ngs.grad(u) * ngs.grad(v) * ngs.dx
+    )
+
+    # RHS: f + (1/dt) * u_old
+    # Here we assume u_old = 0 for data generation
+    f = ngs.LinearForm(v * ngs.dx)
+
+    a.Assemble()
+    f.Assemble()
+
+    return _applyBC_export_data(a, f, fes)
+
+
+def diffusion_gene(nx: int, ny: int, dt: float = 0.001, D: float = 1.0):
+    """
+    Generate data for 2D diffusion equation (one backward Euler step).
+    Same style as poisson_gene.
+    """
+    mesh = MakeQuadMesh(nx=nx, ny=ny)
+
+    fes = ngs.H1(mesh, order=1, dirichlet=".*")
+
+    u, v = fes.TrialFunction(), fes.TestFunction()
+
+    a = ngs.BilinearForm(
+        (1.0 / dt) * u * v * ngs.dx +
+        D * ngs.grad(u) * ngs.grad(v) * ngs.dx
+    )
+
+    # Assume u_old = 0 and f = 1 for data generation
+    f = ngs.LinearForm(v * ngs.dx)
+
+    a.Assemble()
+    f.Assemble()
+
+    return _applyBC_export_data(a, f, fes)
+
+
 def poisson_gene(nx: int, ny: int):
     """
     Generate data for 2D Poisson problem.
@@ -72,8 +125,8 @@ if __name__ == '__main__':
     A, b = poisson_gene(
         # nx=10,
         # ny=10
-        nx=4,
-        ny=4
+        nx=3,
+        ny=3,
     )
 
     # print(f"{type(A) = }")
@@ -81,11 +134,19 @@ if __name__ == '__main__':
     # print(f"{A.shape = }")
     # print(f"{b.shape = }")
 
-    np.set_printoptions(linewidth=200)
-    print(f"{A.todense() = }")
+    # np.set_printoptions(linewidth=200)
+    # print(f"{A.todense() = }")
 
     # Then, for example, export to a `.mat` file
     # ...
     # print(normal_like(b))
     #gen_vec(len(b), 3, A)
-    print(A)
+    # print(A)
+
+    np.set_printoptions(
+        precision=1,
+        suppress=True,
+        linewidth=120
+    )
+
+    print(np.array(A.todense()))
