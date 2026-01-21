@@ -77,6 +77,69 @@ class UnsupervisedINN(nn.Module):
             x = layer(x)
         return x
 
+def train_unsupervised_inn(
+    nx=4,
+    ny=4,
+    samples=20000,
+    n_layers=8,
+    hidden_dim=256,
+    epochs=100,
+    lr=1e-3,
+    batch_size=256,
+):
+    A_scipy, _ = poisson_gene(nx=nx, ny=ny)
+    dim = A_scipy.shape[0]
+
+    A_tensor = torch.tensor(A_scipy.toarray()).double()
+
+    v_train, w_train = gen_vec(dim=dim, samples=samples, A=A_scipy)
+    v_train = v_train.double()
+    w_train = w_train.double()
+
+    v_mean = v_train.mean(dim=0, keepdim=True)
+    v_std = v_train.std(dim=0, keepdim=True) + 1e-6
+    v_train_norm = (v_train - v_mean) / v_std
+
+    dataset = TensorDataset(v_train_norm, w_train)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    model = UnsupervisedINN(dim=dim, n_layers=n_layers, hidden_dim=hidden_dim)
+    model.double()
+
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
+
+    mse_loss_fn = nn.MSELoss()
+
+    model.train()
+    for epoch in range(epochs):
+        total_loss = 0.0
+        for v_batch_norm, _ in dataloader: # Ignore w_batch (ground truth)
+            optimizer.zero_grad()
+            
+            # 1. Forward: Model predicts w based on normalized v
+            w_pred = model(v_batch_norm)
+            
+            # 2. [NEW] Physics Loss Calculation: || A * w_pred - v_physical ||^2
+            # We must un-normalize v_batch to compare with physical A*w
+            v_batch_phys = v_batch_norm * v_std + v_mean
+            
+            # Compute A * w (Using transpose for batch multiplication: (w @ A.T))
+            v_reconstructed = torch.matmul(w_pred, A_tensor.t())
+            
+            # 3. Loss measures if the predicted w satisfies the Poisson equation
+            loss = mse_loss_fn(v_reconstructed, v_batch_phys)
+            
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+
+        avg_loss = total_loss / len(dataloader)
+        scheduler.step(avg_loss)
+    
+    return model, v_mean, v_std, A_scipy
+
+
 # --- Main Execution ---
 if __name__ == "__main__":
     # Config
