@@ -63,8 +63,9 @@ def apply(
     x_kplusone = torch.rand(n, dtype=A.dtype)
     x_k = torch.rand(n, dtype=A.dtype)
     i = 0
+    resid = A @ x_kplusone - b
     mode = mode.lower()
-    while (torch.dist(x_kplusone, x_k) > epsilon and i < max_iter):
+    while ((torch.dist(x_kplusone, x_k) > epsilon or torch.norm(resid) > epsilon) and i < max_iter):
         x_k = x_kplusone
         resid = A @ x_kplusone - b
         gamma = torch.rand(n)
@@ -82,6 +83,8 @@ def apply(
             gamma = resid / diag
             # Simple forward correction using the lower diagonal.
             gamma[1:] += (lower / diag[1:]) * gamma[:-1]
+        elif mode == 'no_p':
+            gamma = 0.5 * resid
 
         x_kplusone = x_k - gamma
         i += 1
@@ -162,12 +165,19 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     time_gauss = stopwatch.elapsed_time
     stopwatch.reset()
 
+    #note x, number of iterations and time of Gauss preconditioner
+    stopwatch.start()
+    x_no_p, num_iter_no_p = apply(A, b, 'no_p')
+    stopwatch.stop()
+    time_no_p = stopwatch.elapsed_time
+    stopwatch.reset()
+
     print("comparison complete")
     print("STATS")
     print("*"*20)
-    print("model: supervised INN - unsupervised INN - MLP - Jacobi - Gauss")
-    print(f"time: {time_INN_sup:.4f} - {time_INN_unsup:.4f} - {time_MLP:.4f} - {time_jacobi:.4f} - {time_gauss:.4f}")
-    print(f"num_iter: {num_iter_INN_sup} - {num_iter_INN_unsup} - {num_iter_MLP} - {num_iter_jacobi} - {num_iter_gauss}")
+    print("model: supervised INN - unsupervised INN - MLP - Jacobi - Gauss - no P")
+    print(f"time: {time_INN_sup:.4f} - {time_INN_unsup:.4f} - {time_MLP:.4f} - {time_jacobi:.4f} - {time_gauss:.4f} - {time_no_p:.4f}")
+    print(f"num_iter: {num_iter_INN_sup} - {num_iter_INN_unsup} - {num_iter_MLP} - {num_iter_jacobi} - {num_iter_gauss} - {num_iter_no_p}")
     print("*" * 20)
     print(x_INN_sup)
     print(x_INN_unsup)
