@@ -1,18 +1,16 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
 import sys
 import os
+from torch.utils.data import DataLoader, TensorDataset
 
 # --- Import from data folder ---
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from data.data_generation import poisson_gene, gen_vec
 
-
-# ============================================================
-# 1. Sub-Network
-# ============================================================
+# --- 1. Sub-Network (Learns Scale & Translation) ---
 class SubNet(nn.Module):
     def __init__(self, in_dim, out_dim, hidden_dim=128):
         super().__init__()
@@ -21,177 +19,154 @@ class SubNet(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, out_dim * 2)
+            nn.Linear(hidden_dim, out_dim * 2) 
         )
-        nn.init.zeros_(self.net[-1].weight)
-        nn.init.zeros_(self.net[-1].bias)
+        self.net[-1].weight.data.zero_()
+        self.net[-1].bias.data.zero_()
 
     def forward(self, x):
-        s, t = self.net(x).chunk(2, dim=-1)
-        s = 0.1 * torch.tanh(s)
+        params = self.net(x)
+        s, t = params.chunk(2, dim=-1)
+        s = torch.tanh(s) * 10.0  
         return s, t
 
-
-# ============================================================
-# 2. Affine Coupling Layer (invertible)
-# ============================================================
+# --- 2. Coupling Layer ---
 class AffineCoupling(nn.Module):
-    def __init__(self, dim, hidden_dim=128):
+    def __init__(self, dim, hidden_dim=128, flip=False):
         super().__init__()
-        self.split = dim // 2
-        self.net = SubNet(self.split, dim - self.split, hidden_dim)
+        self.dim = dim
+        self.flip = flip
+        self.n_split = dim // 2
+        self.n_keep = dim - self.n_split
+        
+        if not self.flip:
+            net_in = self.n_split
+            net_out = self.n_keep
+        else:
+            net_in = self.n_keep
+            net_out = self.n_split
+            
+        self.net = SubNet(net_in, net_out, hidden_dim)
 
     def forward(self, x):
-        x1, x2 = x[:, :self.split], x[:, self.split:]
-        s, t = self.net(x1)
-        y2 = x2 * torch.exp(s) + t
-        log_det = s.sum(dim=1)
-        return torch.cat([x1, y2], dim=1), log_det
+        x1 = x[:, :self.n_split]
+        x2 = x[:, self.n_split:]
 
-    def inverse(self, y):
-        y1, y2 = y[:, :self.split], y[:, self.split:]
-        s, t = self.net(y1)
-        x2 = (y2 - t) * torch.exp(-s)
-        return torch.cat([y1, x2], dim=1)
+        if not self.flip:
+            s, t = self.net(x1)
+            y1 = x1
+            y2 = x2 * torch.exp(s) + t
+        else:
+            s, t = self.net(x2)
+            y1 = x1 * torch.exp(s) + t
+            y2 = x2
 
+        return torch.cat([y1, y2], dim=1)
 
-# ============================================================
-# 3. INN Model
-# ============================================================
-class INN(nn.Module):
+# --- 3. INN Model ---
+class UnsupervisedINN(nn.Module):
     def __init__(self, dim, n_layers=8, hidden_dim=128):
         super().__init__()
-        self.layers = nn.ModuleList()
-        self.perms = []
-
-        for _ in range(n_layers):
-            self.layers.append(AffineCoupling(dim, hidden_dim))
-            perm = torch.randperm(dim)
-            self.register_buffer(f"perm_{len(self.perms)}", perm)
-            self.perms.append(perm)
+        self.layers = nn.ModuleList([
+            AffineCoupling(dim, hidden_dim, flip=(i % 2 == 1))
+            for i in range(n_layers)
+        ])
 
     def forward(self, x):
-        log_det_total = torch.zeros(x.size(0), device=x.device, dtype=x.dtype)
-        for layer, perm in zip(self.layers, self.perms):
-            x = x[:, perm]
-            x, log_det = layer(x)
-            log_det_total += log_det
-        return x, log_det_total
+        for layer in self.layers:
+            x = layer(x)
+        return x
 
-    def inverse(self, z):
-        for layer, perm in reversed(list(zip(self.layers, self.perms))):
-            inv_perm = torch.argsort(perm)
-            z = layer.inverse(z)
-            z = z[:, inv_perm]
-        return z
-
-
-# ============================================================
-# 4. Main
-# ============================================================
+# --- Main Execution ---
 if __name__ == "__main__":
-
-    # --------------------
     # Config
-    # --------------------
-    NX, NY = 10, 10
-    SAMPLES = 20000
-    LAYERS = 8
+    NX, NY = 11, 11
+    SAMPLES = 20000      
+    LAYERS = 4
     HIDDEN = 256
     EPOCHS = 100
     LR = 1e-3
-    BATCH_SIZE = 256
+    BATCH_SIZE = 256      
 
-    torch.set_default_dtype(torch.float64)
-
-    # --------------------
-    # Generate Poisson system
-    # --------------------
-    print(f"Generating Poisson matrix ({NX}x{NY})...")
+    # 1. Get Matrix A and convert to Tensor for Physics Loss
+    print(f"Generating Poisson Matrix ({NX}x{NY})...")
     A_scipy, _ = poisson_gene(nx=NX, ny=NY)
-    A = torch.tensor(A_scipy.toarray(), dtype=torch.float64)
-    DIM = A.shape[0]
+    DIM = A_scipy.shape[0]
+    
+    # [NEW] Convert A to dense tensor for Unsupervised Loss calculation
+    A_tensor = torch.tensor(A_scipy.toarray()).double()
 
-    # --------------------
-    # Training data
-    # --------------------
-    print(f"Generating {SAMPLES} samples...")
-    v_train, _ = gen_vec(dim=DIM, samples=SAMPLES, A=A_scipy)
+    # 2. Generate Training Data
+    print(f"Generating {SAMPLES} training vectors...")
+    v_train, w_train = gen_vec(dim=DIM, samples=SAMPLES, A=A_scipy)
+    
     v_train = v_train.double()
+    w_train = w_train.double() # Note: w_train is now ONLY used for verification, not training
 
-    # --------------------
-    # Normalization (per-dimension)
-    # --------------------
+    # 3. Normalize Inputs (v)
     v_mean = v_train.mean(dim=0, keepdim=True)
     v_std = v_train.std(dim=0, keepdim=True) + 1e-6
-    v_train = (v_train - v_mean) / v_std
+    v_train_norm = (v_train - v_mean) / v_std
 
-    # --------------------
-    # Model
-    # --------------------
-    model = INN(dim=DIM, n_layers=LAYERS, hidden_dim=HIDDEN).double()
-    optimizer = optim.Adam(model.parameters(), lr=LR)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=5
-    )
+    print(f"Data Normalized. Mean: {v_mean.mean():.4f}, Std: {v_std.mean():.4f}")
 
-    dataset = torch.utils.data.TensorDataset(v_train)
+    dataset = TensorDataset(v_train_norm, w_train)
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
-    # --------------------
-    # Training
-    # --------------------
-    print("Starting INN training...")
-    model.train()
+    # Setup model
+    model = UnsupervisedINN(dim=DIM, n_layers=LAYERS, hidden_dim=HIDDEN)
+    model.double() 
+    
+    optimizer = optim.Adam(model.parameters(), lr=LR)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
+    
+    # [NEW] Loss function is standard MSE, but inputs to it change
+    mse_loss_fn = nn.MSELoss()
 
+    # --- Training ---
+    print("Starting Unsupervised Training...")
+    model.train()
     for epoch in range(EPOCHS):
         total_loss = 0.0
-
-        for (v_batch,) in dataloader:
+        for v_batch_norm, _ in dataloader: # Ignore w_batch (ground truth)
             optimizer.zero_grad()
-
-            z, log_det = model(v_batch)
-
-            log_pz = -0.5 * (z ** 2).sum(dim=1)
-            loss = -(log_pz + log_det).mean()
-
+            
+            # 1. Forward: Model predicts w based on normalized v
+            w_pred = model(v_batch_norm)
+            
+            # 2. [NEW] Physics Loss Calculation: || A * w_pred - v_physical ||^2
+            # We must un-normalize v_batch to compare with physical A*w
+            v_batch_phys = v_batch_norm * v_std + v_mean
+            
+            # Compute A * w (Using transpose for batch multiplication: (w @ A.T))
+            v_reconstructed = torch.matmul(w_pred, A_tensor.t())
+            
+            # 3. Loss measures if the predicted w satisfies the Poisson equation
+            loss = mse_loss_fn(v_reconstructed, v_batch_phys)
+            
             loss.backward()
             optimizer.step()
-
             total_loss += loss.item()
 
         avg_loss = total_loss / len(dataloader)
         scheduler.step(avg_loss)
 
         if epoch % 10 == 0:
-            lr = optimizer.param_groups[0]["lr"]
-            print(f"Epoch {epoch:4d} | NLL = {avg_loss:.6f} | LR = {lr:.2e}")
+            lr_current = optimizer.param_groups[0]['lr']
+            print(f"Epoch {epoch}: Physics Loss = {avg_loss:.8f}, LR = {lr_current:.2e}")
 
-    # --------------------
-    # Sanity checks
-    # --------------------
-    print("\nRunning sanity checks...")
+    # --- Verification ---
     model.eval()
-
     with torch.no_grad():
-        # latent check
-        z, _ = model(v_train[:1000])
-        print(f"Latent mean: {z.mean():.4e}, std: {z.std():.4f}")
-
-        # inverse consistency
-        v = v_train[:10]
-        z, _ = model(v)
-        v_rec = model.inverse(z)
-        rel_err = torch.norm(v - v_rec) / torch.norm(v)
-        print(f"Inverse relative error: {rel_err:.2e}")
-
-        # learned inverse quality
-        w = torch.randn(10, DIM, dtype=torch.float64)
-        v = (A @ w.T).T
-        v = (v - v_mean) / v_std
-
-        z, _ = model(v)
-        w_rec = model.inverse(z)
-
-        mse = torch.nn.functional.mse_loss(w_rec, w)
-        print(f"Inverse MSE (A⁻¹ quality): {mse:.4e}")
+        test_w = torch.randn(1, DIM).double()
+        test_v = torch.matmul(test_w, A_tensor.t())
+        
+        test_v_norm = (test_v - v_mean) / v_std
+        
+        pred_w = model(test_v_norm)
+        
+        # We can still calculate MSE against ground truth here just to see if it worked
+        error = torch.nn.functional.mse_loss(pred_w, test_w)
+        print(f"\nFinal Test MSE (vs Hidden Ground Truth): {error.item():.8f}")
+        
+    print("Training complete using Unsupervised Physics Loss.")
