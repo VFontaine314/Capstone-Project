@@ -24,18 +24,20 @@ It is strongly recommended to use a virtual environment as some older versions o
 
 
 2. Repository Structure
+
 .
 ├── data/
-│   └── data_generation.py   # Poisson matrix + vector generation
+│   └── data_generation.py        # Poisson matrix + vector generation
 ├── applications/
 │   └── applicationAndTest.py
 ├── models/
-│   └── __init__.py
-│   └── model_supervised.py             # Supervised INN and MLP training
-│   └── model_unsupervised.py 
+│   ├── __init__.py
+│   ├── model_supervised.py       # Supervised INN and MLP training
+│   └── model_unsupervised.py
 ├── utils/
 │   └── __init__.py
 ├── README.md
+
 
 
 data_generation.py must not be modified
