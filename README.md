@@ -25,6 +25,9 @@ It is strongly recommended to use a virtual environment as some older versions o
 
 2. Repository Structure
 
+## Repository Structure
+
+```text
 .
 ├── data/
 │   └── data_generation.py        # Poisson matrix + vector generation
@@ -36,7 +39,8 @@ It is strongly recommended to use a virtual environment as some older versions o
 │   └── model_unsupervised.py
 ├── utils/
 │   └── __init__.py
-├── README.md
+└── README.md
+```
 
 
 
