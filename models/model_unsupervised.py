@@ -92,17 +92,6 @@ def train_unsupervised_inn(
 
     A_tensor = torch.tensor(A_scipy.toarray()).double()
 
-    v_train, w_train = gen_vec(dim=dim, samples=samples, A=A_scipy)
-    v_train = v_train.double()
-    w_train = w_train.double()
-
-    v_mean = v_train.mean(dim=0, keepdim=True)
-    v_std = v_train.std(dim=0, keepdim=True) + 1e-6
-    v_train_norm = (v_train - v_mean) / v_std
-
-    dataset = TensorDataset(v_train_norm, w_train)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-
     model = UnsupervisedINN(dim=dim, n_layers=n_layers, hidden_dim=hidden_dim)
     model.double()
 
@@ -112,8 +101,18 @@ def train_unsupervised_inn(
     mse_loss_fn = nn.MSELoss()
 
     model.train()
-    for epoch in range(epochs):
+    for _ in range(epochs):
         total_loss = 0.0
+        v_train, w_train = gen_vec(dim=dim, samples=samples, A=A_scipy)
+        v_train = v_train.double()
+        w_train = w_train.double()
+
+        v_mean = v_train.mean(dim=0, keepdim=True)
+        v_std = v_train.std(dim=0, keepdim=True) + 1e-6
+        v_train_norm = (v_train - v_mean) / v_std
+
+        dataset = TensorDataset(v_train_norm, w_train)
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
         for v_batch_norm, _ in dataloader: # Ignore w_batch (ground truth)
             optimizer.zero_grad()
             
@@ -171,7 +170,7 @@ if __name__ == "__main__":
     v_std = v_train.std(dim=0, keepdim=True) + 1e-6
     v_train_norm = (v_train - v_mean) / v_std
 
-    print(f"Data Normalized. Mean: {v_mean.mean():.4f}, Std: {v_std.mean():.4f}")
+    # print(f"Data Normalized. Mean: {v_mean.mean():.4f}, Std: {v_std.mean():.4f}")
 
     dataset = TensorDataset(v_train_norm, w_train)
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)

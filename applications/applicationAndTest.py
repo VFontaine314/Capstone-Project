@@ -92,9 +92,9 @@ def apply(
 def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     nx = n
     ny = nx
-    if nx * ny != n:
-        nx = n
-        ny = 1
+    #if nx * ny != n:
+    #    nx = n
+    #    ny = 1
     A_scipy, b_np = poisson_gene(nx=nx, ny=ny)
     A = torch.tensor(A_scipy.toarray(), dtype=torch.float64)
     b = torch.tensor(b_np, dtype=torch.float64)
@@ -168,8 +168,12 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     print("model: supervised INN - unsupervised INN - MLP - Jacobi - Gauss")
     print(f"time: {time_INN_sup:.4f} - {time_INN_unsup:.4f} - {time_MLP:.4f} - {time_jacobi:.4f} - {time_gauss:.4f}")
     print(f"num_iter: {num_iter_INN_sup} - {num_iter_INN_unsup} - {num_iter_MLP} - {num_iter_jacobi} - {num_iter_gauss}")
-
+    print("*" * 20)
+    print(x_INN_sup)
+    print(x_INN_unsup)
+    print(x_jacobi)
+    print(x_gauss)
 
 if __name__ == "__main__":
     comparing(n=11, num_epochs_INN=10, num_epochs_NN=0)
-    print("*" * 20)
+    

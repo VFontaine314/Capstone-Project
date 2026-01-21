@@ -115,17 +115,6 @@ def train_supervised_inn(
     A_scipy, _ = poisson_gene(nx=nx, ny=ny)
     dim = A_scipy.shape[0]
 
-    v_train, w_train = gen_vec(dim=dim, samples=samples, A=A_scipy)
-    v_train = v_train.double()
-    w_train = w_train.double()
-
-    v_mean = v_train.mean(dim=0, keepdim=True)
-    v_std = v_train.std(dim=0, keepdim=True) + 1e-6
-    v_train_norm = (v_train - v_mean) / v_std
-
-    dataset = TensorDataset(v_train_norm, w_train)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-
     model = SupervisedINN(dim=dim, n_layers=n_layers, hidden_dim=hidden_dim)
     model.double()
 
@@ -138,6 +127,16 @@ def train_supervised_inn(
     model.train()
     for _ in range(epochs):
         total_loss = 0.0
+        v_train, w_train = gen_vec(dim=dim, samples=samples, A=A_scipy)
+        v_train = v_train.double()
+        w_train = w_train.double()
+
+        v_mean = v_train.mean(dim=0, keepdim=True)
+        v_std = v_train.std(dim=0, keepdim=True) + 1e-6
+        v_train_norm = (v_train - v_mean) / v_std
+
+        dataset = TensorDataset(v_train_norm, w_train)
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
         for v_batch, w_batch in dataloader:
             optimizer.zero_grad()
             w_pred = model(v_batch)
@@ -209,7 +208,7 @@ if __name__ == "__main__":
     HIDDEN = 256
     EPOCHS = 100
     LR = 1e-3
-    BATCH_SIZE = 256      
+    BATCH_SIZE = 256
 
     # 1. Get Dimension from A
     print(f"Generating Poisson Matrix ({NX}x{NY})...")
