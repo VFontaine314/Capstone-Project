@@ -7,7 +7,8 @@ import sys
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from data.data_generation import poisson_gene
-from models.model_supervised import train_supervised_inn, train_supervised_mlp
+from models.model_supervised import train_supervised_inn
+from models.mlp import train_mlp
 class Stopwatch:
     def __init__(self):
         self.start_time = None
@@ -72,15 +73,16 @@ def apply(
         elif mode == 'nn':
             gamma = model.forward(resid)
         elif mode == 'jacobi':
-            gamma = torch.diagonal(A) * resid
+            diag = torch.diagonal(A)
+            gamma = resid / diag
         elif mode == 'gauss':
             diag = torch.diagonal(A)
             lower = torch.diagonal(A, offset=-1)
-            gamma = diag * resid
-            # Use lower diagonal contribution where it exists.
-            gamma[1:] += lower * resid[:-1]
+            gamma = resid / diag
+            # Simple forward correction using the lower diagonal.
+            gamma[1:] += (lower / diag[1:]) * gamma[:-1]
 
-        x_kplusone = x_k + gamma
+        x_kplusone = x_k - gamma
         i += 1
 
     return x_kplusone, i
@@ -118,18 +120,18 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     time_INN = stopwatch.elapsed_time
     stopwatch.reset()
 
-    # model_mlp, v_mean_mlp, v_std_mlp, _ = train_supervised_mlp(
-    #     nx=nx,
-    #     ny=ny,
-    #     epochs=num_epochs_NN,
-    # )
-    # stopwatch.start()
-    # x_MLP, num_iter_MLP = apply(
-    #     A, b, 'mlp', model_mlp, v_mean=v_mean_mlp, v_std=v_std_mlp
-    # )
-    # stopwatch.stop()
-    # time_MLP = stopwatch.elapsed_time
-    # stopwatch.reset()
+    model_mlp, v_mean_mlp, v_std_mlp, _ = train_mlp(
+        nx=nx,
+        ny=ny,
+        epochs=num_epochs_NN,
+    )
+    stopwatch.start()
+    x_MLP, num_iter_MLP = apply(
+        A, b, 'mlp', model_mlp, v_mean=v_mean_mlp, v_std=v_std_mlp
+    )
+    stopwatch.stop()
+    time_MLP = stopwatch.elapsed_time
+    stopwatch.reset()
 
     #note x, number of iterations and time of Jacobi preconditioner
     stopwatch.start()
@@ -148,16 +150,15 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     print("comparison complete")
     print("STATS")
     print("*"*20)
-    print("model: supervised - unsupervised - Jacobi - Gauss")
+    print("model: supervised - mlp - Jacobi - Gauss")
     print(
-        f"time: {time_INN:.4f} - {time_jacobi:.4f} - {time_gauss:.4f}"
+        f"time: {time_INN:.4f} - {time_MLP:.4f} - {time_jacobi:.4f} - {time_gauss:.4f}"
     )
     print(
-        f"num_iter: {num_iter_INN} - {num_iter_jacobi} - {num_iter_gauss}"
+        f"num_iter: {num_iter_INN} - {num_iter_MLP} - {num_iter_jacobi} - {num_iter_gauss}"
     )
 
 
 if __name__ == "__main__":
-    comparing(n=400, num_epochs_INN=10, num_epochs_NN=10)
+    comparing(n=100, num_epochs_INN=10, num_epochs_NN=10)
     print("*" * 20)
-
