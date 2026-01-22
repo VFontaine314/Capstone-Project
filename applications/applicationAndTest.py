@@ -115,7 +115,7 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
 
     #note x, number of iterations and time of INN
 
-    model_sup, v_mean_sup, v_std_sup, _ = train_supervised_inn(
+    model_sup, v_mean_sup, v_std_sup, _, _ = train_supervised_inn(
         nx=nx,
         ny=ny,
         epochs=num_epochs_INN,
@@ -130,7 +130,7 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
 
 
 
-    model_unsup, v_mean_unsup, v_std_unsup, _ = train_unsupervised_inn(
+    model_unsup, v_mean_unsup, v_std_unsup, _, _ = train_unsupervised_inn(
         nx=nx,
         ny=ny,
         epochs=num_epochs_INN,
@@ -175,7 +175,7 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     time_no_p = stopwatch.elapsed_time
     stopwatch.reset()
 
-    # print numerical results
+    # Print numerical results
     print("comparison complete")
     print("STATS")
     print("*"*20)
@@ -183,19 +183,20 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     print(f"time: {time_INN_sup:.4f} - {time_INN_unsup:.4f} - {time_MLP:.4f} - {time_jacobi:.4f} - {time_gauss:.4f} - {time_no_p:.4f}")
     print(f"num_iter: {num_iter_INN_sup} - {num_iter_INN_unsup} - {num_iter_MLP} - {num_iter_jacobi} - {num_iter_gauss} - {num_iter_no_p}")
     print("*" * 20)
-    print(x_INN_sup)
-    print(x_INN_unsup)
-    print(x_jacobi)
-    print(x_gauss)
 
-    # plot convergence results
+    torch.set_printoptions(precision=4, sci_mode=False)
+    print(x_INN_sup.detach())
+    print(x_INN_unsup.detach())
+    print(x_jacobi.detach())
+    print(x_gauss.detach())
+
+    # Plot convergence results
     plt.plot(norm_resids_sup, label="Supervised INN")
     plt.plot(norm_resids_unsup, label="Unsupervised INN")
     plt.plot(norm_resids_MLP, label="MLP")
     plt.plot(norm_resids_jacobi, label="Jacobi")
     plt.plot(norm_resids_gauss, label="Gauss")
     plt.plot(norm_resids_no_p, label="No Preconditioner")
-
     plt.xlabel("Iteration")
     plt.ylabel("Residual")
     plt.title("Convergence Graph")
@@ -203,4 +204,4 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     plt.show()
 
 if __name__ == "__main__":
-    comparing(n=11, num_epochs_INN=10, num_epochs_NN=0)
+    comparing(n=4, num_epochs_INN=10, num_epochs_NN=0)

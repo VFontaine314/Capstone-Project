@@ -4,6 +4,7 @@ import torch.optim as optim
 import sys
 import os
 from torch.utils.data import DataLoader, TensorDataset
+import matplotlib.pyplot as plt
 
 # --- Import from data folder ---
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -86,109 +87,50 @@ def train_unsupervised_inn(
     epochs=100,
     lr=1e-3,
     batch_size=256,
-):
-    A_scipy, _ = poisson_gene(nx=nx, ny=ny)
-    dim = A_scipy.shape[0]
-
-    A_tensor = torch.tensor(A_scipy.toarray()).double()
-
-    model = UnsupervisedINN(dim=dim, n_layers=n_layers, hidden_dim=hidden_dim)
-    model.double()
-
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
-
-    mse_loss_fn = nn.MSELoss()
-
-    model.train()
-    for _ in range(epochs):
-        total_loss = 0.0
-        v_train, w_train = gen_vec(dim=dim, samples=samples, A=A_scipy)
-        v_train = v_train.double()
-        w_train = w_train.double()
-
-        v_mean = v_train.mean(dim=0, keepdim=True)
-        v_std = v_train.std(dim=0, keepdim=True) + 1e-6
-        v_train_norm = (v_train - v_mean) / v_std
-
-        dataset = TensorDataset(v_train_norm, w_train)
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-        for v_batch_norm, _ in dataloader: # Ignore w_batch (ground truth)
-            optimizer.zero_grad()
-            
-            # 1. Forward: Model predicts w based on normalized v
-            w_pred = model(v_batch_norm)
-            
-            # 2. [NEW] Physics Loss Calculation: || A * w_pred - v_physical ||^2
-            # We must un-normalize v_batch to compare with physical A*w
-            v_batch_phys = v_batch_norm * v_std + v_mean
-            
-            # Compute A * w (Using transpose for batch multiplication: (w @ A.T))
-            v_reconstructed = torch.matmul(w_pred, A_tensor.t())
-            
-            # 3. Loss measures if the predicted w satisfies the Poisson equation
-            loss = mse_loss_fn(v_reconstructed, v_batch_phys)
-            
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
-
-        avg_loss = total_loss / len(dataloader)
-        scheduler.step(avg_loss)
-    
-    return model, v_mean, v_std, A_scipy
-
-
-# --- Main Execution ---
-if __name__ == "__main__":
-    # Config
-    NX, NY = 11, 11
-    SAMPLES = 20000      
-    LAYERS = 4
-    HIDDEN = 256
-    EPOCHS = 100
-    LR = 1e-3
-    BATCH_SIZE = 256      
+):     
 
     # 1. Get Matrix A and convert to Tensor for Physics Loss
-    print(f"Generating Poisson Matrix ({NX}x{NY})...")
-    A_scipy, _ = poisson_gene(nx=NX, ny=NY)
-    DIM = A_scipy.shape[0]
+    #print(f"Generating Poisson Matrix ({nx}x{ny})...")
+    A_scipy, _ = poisson_gene(nx=nx, ny=ny)
+    dim = A_scipy.shape[0]
     
-    # [NEW] Convert A to dense tensor for Unsupervised Loss calculation
-    A_tensor = torch.tensor(A_scipy.toarray()).double()
-
-    # 2. Generate Training Data
-    print(f"Generating {SAMPLES} training vectors...")
-    v_train, w_train = gen_vec(dim=DIM, samples=SAMPLES, A=A_scipy)
     
-    v_train = v_train.double()
-    w_train = w_train.double() # Note: w_train is now ONLY used for verification, not training
-
-    # 3. Normalize Inputs (v)
-    v_mean = v_train.mean(dim=0, keepdim=True)
-    v_std = v_train.std(dim=0, keepdim=True) + 1e-6
-    v_train_norm = (v_train - v_mean) / v_std
-
-    # print(f"Data Normalized. Mean: {v_mean.mean():.4f}, Std: {v_std.mean():.4f}")
-
-    dataset = TensorDataset(v_train_norm, w_train)
-    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
     # Setup model
-    model = UnsupervisedINN(dim=DIM, n_layers=LAYERS, hidden_dim=HIDDEN)
-    model.double() 
+    model = UnsupervisedINN(dim=dim, n_layers=n_layers, hidden_dim=hidden_dim)
+    model.double()
     
-    optimizer = optim.Adam(model.parameters(), lr=LR)
+    optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
     
     # [NEW] Loss function is standard MSE, but inputs to it change
     mse_loss_fn = nn.MSELoss()
 
     # --- Training ---
-    print("Starting Unsupervised Training...")
+    #print("Starting Unsupervised Training...")
     model.train()
-    for epoch in range(EPOCHS):
+    avg_losses = []
+    for _ in range(epochs):
+        # [NEW] Convert A to dense tensor for Unsupervised Loss calculation
+        A_tensor = torch.tensor(A_scipy.toarray()).double()
+
+        # 2. Generate Training Data
+        #print(f"Generating {samples} training vectors...")
+        v_train, w_train = gen_vec(dim=dim, samples=samples, A=A_scipy)
+        
+        v_train = v_train.double()
+        w_train = w_train.double() # Note: w_train is now ONLY used for verification, not training
+
+        # 3. Normalize Inputs (v)
+        v_mean = v_train.mean(dim=0, keepdim=True)
+        v_std = v_train.std(dim=0, keepdim=True) + 1e-6
+        v_train_norm = (v_train - v_mean) / v_std
+
+        # print(f"Data Normalized. Mean: {v_mean.mean():.4f}, Std: {v_std.mean():.4f}")
+
+        dataset = TensorDataset(v_train_norm, w_train)
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
         total_loss = 0.0
         for v_batch_norm, _ in dataloader: # Ignore w_batch (ground truth)
             optimizer.zero_grad()
@@ -211,17 +153,27 @@ if __name__ == "__main__":
             total_loss += loss.item()
 
         avg_loss = total_loss / len(dataloader)
+        avg_losses.append(avg_loss)
         scheduler.step(avg_loss)
 
-        if epoch % 10 == 0:
-            lr_current = optimizer.param_groups[0]['lr']
-            print(f"Epoch {epoch}: Physics Loss = {avg_loss:.8f}, LR = {lr_current:.2e}")
+        #if epoch % 10 == 0:
+            #lr_current = optimizer.param_groups[0]['lr']
+            #print(f"Epoch {epoch}: Physics Loss = {avg_loss:.8f}, LR = {lr_current:.2e}")
+    
+    return model, v_mean, v_std, A_scipy, avg_losses
 
-    # --- Verification ---
+
+# --- Main Execution ---
+if __name__ == "__main__":
+    # Train unsupervised INN model
+    model, v_mean, v_std, A_scipy, avg_losses = train_unsupervised_inn(
+        nx=4, ny=4, samples=20000, n_layers=8, hidden_dim=256, epochs=50, lr=1e-5, batch_size=256)
+    
+    # Calculate test error
     model.eval()
     with torch.no_grad():
-        test_w = torch.randn(1, DIM).double()
-        test_v = torch.matmul(test_w, A_tensor.t())
+        test_w = torch.randn(1, A_scipy.shape[0]).double()
+        test_v = torch.matmul(test_w, torch.tensor(A_scipy.toarray()).double().t())
         
         test_v_norm = (test_v - v_mean) / v_std
         
@@ -230,5 +182,11 @@ if __name__ == "__main__":
         # We can still calculate MSE against ground truth here just to see if it worked
         error = torch.nn.functional.mse_loss(pred_w, test_w)
         print(f"\nFinal Test MSE (vs Hidden Ground Truth): {error.item():.8f}")
-        
-    print("Training complete using Unsupervised Physics Loss.")
+
+    # Plot training loss graphs
+    plt.plot(avg_losses)
+    plt.xlabel("Epoch")
+    plt.ylabel("MSE Loss")
+    plt.title("Unsupervised Training Graph")
+    plt.legend()
+    plt.show()
