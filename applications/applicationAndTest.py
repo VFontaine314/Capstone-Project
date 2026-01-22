@@ -56,7 +56,7 @@ def apply(
     v_mean=None,
     v_std=None,
     epsilon=0.001,
-    max_iter=10,
+    max_iter=100,
     random_state=0,
     learned_step=0.5,
 ):
@@ -99,13 +99,13 @@ def apply(
     return x_kplusone, i, norm_resids
 
 
-def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
+def comparing(n, pde_gene, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     nx = n
     ny = nx
     #if nx * ny != n:
     #    nx = n
     #    ny = 1
-    A_scipy, b_np = poisson_gene(nx=nx, ny=ny)
+    A_scipy, b_np = pde_gene(nx=nx, ny=ny)
     A = torch.tensor(A_scipy.toarray(), dtype=torch.float64)
     b = torch.tensor(b_np, dtype=torch.float64)
 
@@ -119,11 +119,7 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
 
     #note x, number of iterations and time of INN
 
-    model_sup, v_mean_sup, v_std_sup, _, _ = train_supervised_inn(
-        nx=nx,
-        ny=ny,
-        epochs=num_epochs_INN,
-    )
+    model_sup, v_mean_sup, v_std_sup, _ = train_supervised_inn(A_scipy=A_scipy, epochs=num_epochs_INN)
     stopwatch.start()
 
     x_INN_sup, num_iter_INN_sup, norm_resids_sup = apply(A, b, 'INN', model_sup, v_mean=v_mean_sup, v_std=v_std_sup)
@@ -134,11 +130,7 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
 
 
 
-    model_unsup, v_mean_unsup, v_std_unsup, _, _ = train_unsupervised_inn(
-        nx=nx,
-        ny=ny,
-        epochs=num_epochs_INN,
-    )
+    model_unsup, v_mean_unsup, v_std_unsup, _ = train_unsupervised_inn(A_scipy=A_scipy, epochs=num_epochs_INN)
     stopwatch.start()
     x_INN_unsup, num_iter_INN_unsup, norm_resids_unsup = apply(A, b, 'INN', model_unsup, v_mean=v_mean_unsup, v_std=v_std_unsup)
     stopwatch.stop()
@@ -183,16 +175,26 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     print("comparison complete")
     print("STATS")
     print("*"*20)
-    print("model: supervised INN - unsupervised INN - MLP - Jacobi - Gauss - no P")
+    print("model: supervised INN - unsupervised INN - MLP - Jacobi - Gauss - no Preconditioner")
     print(f"time: {time_INN_sup:.4f} - {time_INN_unsup:.4f} - {time_MLP:.4f} - {time_jacobi:.4f} - {time_gauss:.4f} - {time_no_p:.4f}")
     print(f"num_iter: {num_iter_INN_sup} - {num_iter_INN_unsup} - {num_iter_MLP} - {num_iter_jacobi} - {num_iter_gauss} - {num_iter_no_p}")
     print("*" * 20)
 
-    torch.set_printoptions(precision=4, sci_mode=False)
-    print(x_INN_sup.detach())
-    print(x_INN_unsup.detach())
-    print(x_jacobi.detach())
-    print(x_gauss.detach())
+    #torch.set_printoptions(precision=4, sci_mode=False)
+    #print(x_INN_sup.detach())
+    #print(x_INN_unsup.detach())
+    #print(x_MLP.detach())
+    #print(x_jacobi.detach())
+    #print(x_gauss.detach())
+    #print(x_no_p.detach())
+
+    # Print differences with respect to 'no preconditioner' to see if it converges to the right point
+    print(" --- Differences (with respect to 'no precoditioner') --- ")
+    print(f"supervised INN: {torch.norm(x_INN_sup - x_no_p).item():.4f}")
+    print(f"unsupervised INN: {torch.norm(x_INN_unsup - x_no_p).item():.4f}")
+    print(f"MLP: {torch.norm(x_MLP - x_no_p).item():.4f}")
+    print(f"Jacobi: {torch.norm(x_jacobi - x_no_p).item():.4f}")
+    print(f"Gauss: {torch.norm(x_gauss - x_no_p).item():.4f}")
 
     # Plot convergence results
     plt.plot(norm_resids_sup, label="Supervised INN")
@@ -208,4 +210,4 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     plt.show()
 
 if __name__ == "__main__":
-    comparing(n=11, num_epochs_INN=10, num_epochs_NN=10)
+    comparing(n=4, pde_gene=poisson_gene, num_epochs_INN=10, num_epochs_NN=10)

@@ -79,22 +79,37 @@ class UnsupervisedINN(nn.Module):
         return x
 
 def train_unsupervised_inn(
-    nx=4,
-    ny=4,
-    samples=20000,
-    n_layers=8,
-    hidden_dim=256,
-    epochs=100,
+    A_scipy,
+    samples=100000,
+    n_layers=4,
+    hidden_dim=121,
+    epochs=50,
     lr=1e-3,
-    batch_size=256,
-):     
+    batch_size=1000):     
 
     # 1. Get Matrix A and convert to Tensor for Physics Loss
     #print(f"Generating Poisson Matrix ({nx}x{ny})...")
-    A_scipy, _ = poisson_gene(nx=nx, ny=ny)
     dim = A_scipy.shape[0]
     
-    
+    # [NEW] Convert A to dense tensor for Unsupervised Loss calculation
+    A_tensor = torch.tensor(A_scipy.toarray()).double()
+
+    # 2. Generate Training Data
+    #print(f"Generating {samples} training vectors...")
+    v_train, w_train = gen_vec(dim=dim, samples=samples, A=A_scipy)
+        
+    v_train = v_train.double()
+    w_train = w_train.double() # Note: w_train is now ONLY used for verification, not training
+
+    # 3. Normalize Inputs (v)
+    v_mean = v_train.mean(dim=0, keepdim=True)
+    v_std = v_train.std(dim=0, keepdim=True) + 1e-6
+    v_train_norm = (v_train - v_mean) / v_std
+
+    # print(f"Data Normalized. Mean: {v_mean.mean():.4f}, Std: {v_std.mean():.4f}")
+
+    dataset = TensorDataset(v_train_norm, w_train)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     # Setup model
     model = UnsupervisedINN(dim=dim, n_layers=n_layers, hidden_dim=hidden_dim)
@@ -111,26 +126,6 @@ def train_unsupervised_inn(
     model.train()
     avg_losses = []
     for _ in range(epochs):
-        # [NEW] Convert A to dense tensor for Unsupervised Loss calculation
-        A_tensor = torch.tensor(A_scipy.toarray()).double()
-
-        # 2. Generate Training Data
-        #print(f"Generating {samples} training vectors...")
-        v_train, w_train = gen_vec(dim=dim, samples=samples, A=A_scipy)
-        
-        v_train = v_train.double()
-        w_train = w_train.double() # Note: w_train is now ONLY used for verification, not training
-
-        # 3. Normalize Inputs (v)
-        v_mean = v_train.mean(dim=0, keepdim=True)
-        v_std = v_train.std(dim=0, keepdim=True) + 1e-6
-        v_train_norm = (v_train - v_mean) / v_std
-
-        # print(f"Data Normalized. Mean: {v_mean.mean():.4f}, Std: {v_std.mean():.4f}")
-
-        dataset = TensorDataset(v_train_norm, w_train)
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-
         total_loss = 0.0
         for v_batch_norm, _ in dataloader: # Ignore w_batch (ground truth)
             optimizer.zero_grad()
@@ -160,14 +155,14 @@ def train_unsupervised_inn(
             #lr_current = optimizer.param_groups[0]['lr']
             #print(f"Epoch {epoch}: Physics Loss = {avg_loss:.8f}, LR = {lr_current:.2e}")
     
-    return model, v_mean, v_std, A_scipy, avg_losses
+    return model, v_mean, v_std, avg_losses
 
 
 # --- Main Execution ---
 if __name__ == "__main__":
     # Train unsupervised INN model
-    model, v_mean, v_std, A_scipy, avg_losses = train_unsupervised_inn(
-        nx=4, ny=4, samples=20000, n_layers=8, hidden_dim=256, epochs=50, lr=1e-5, batch_size=256)
+    A_scipy, _ = poisson_gene(nx=4, ny=4)
+    model, v_mean, v_std, avg_losses = train_unsupervised_inn(A_scipy=A_scipy, epochs=10)
     
     # Calculate test error
     model.eval()
