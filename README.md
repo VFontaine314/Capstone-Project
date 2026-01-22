@@ -20,6 +20,7 @@ In many large linear systems, solving them becomes less of an issue of complexit
     -> SciPy
 
 It is strongly recommended to use a virtual environment as some older versions of packages could be installed, causing issues.
+You may also pip install all using the requirements.txt file.
 
 ## Requirements 
 The Requirements are divided into 'MoSCoW' sections, which stands for what the project Must, Should, Could, and Would.
@@ -81,9 +82,11 @@ W1 & Won't have to implement numerical discretization methods for setting up the
 │   ├── __init__.py
 │   ├── model_supervised.py       # Supervised INN and MLP training
 │   └── model_unsupervised.py
+│   └── mlp.py
 ├── utils/
 │   └── __init__.py
 └── README.md
+└── requirements.txt
 ```
 
 
