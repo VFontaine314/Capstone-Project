@@ -3,6 +3,7 @@ import time
 import math
 import os
 import sys
+import matplotlib.pyplot as plt
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -54,8 +55,8 @@ def apply(
     model=None,
     v_mean=None,
     v_std=None,
-    epsilon=0.000001,
-    max_iter=1000,
+    epsilon=0.001,
+    max_iter=10,
     random_state=0,
 ):
     torch.manual_seed(random_state)
@@ -65,9 +66,11 @@ def apply(
     i = 0
     resid = A @ x_kplusone - b
     mode = mode.lower()
+    norm_resids = []
     while ((torch.dist(x_kplusone, x_k) > epsilon or torch.norm(resid) > epsilon) and i < max_iter):
         x_k = x_kplusone
         resid = A @ x_kplusone - b
+        norm_resids.append(torch.norm(resid).item())
         gamma = torch.rand(n)
         if mode == 'inn' or mode == 'mlp':
             resid_norm = (resid.unsqueeze(0) - v_mean) / v_std
@@ -89,7 +92,7 @@ def apply(
         x_kplusone = x_k - gamma
         i += 1
 
-    return x_kplusone, i
+    return x_kplusone, i, norm_resids
 
 
 def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
@@ -119,7 +122,7 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     )
     stopwatch.start()
 
-    x_INN_sup, num_iter_INN_sup = apply(A, b, 'INN', model_sup, v_mean=v_mean_sup, v_std=v_std_sup)
+    x_INN_sup, num_iter_INN_sup, norm_resids_sup = apply(A, b, 'INN', model_sup, v_mean=v_mean_sup, v_std=v_std_sup)
 
     stopwatch.stop()
     time_INN_sup = stopwatch.elapsed_time
@@ -133,7 +136,7 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
         epochs=num_epochs_INN,
     )
     stopwatch.start()
-    x_INN_unsup, num_iter_INN_unsup = apply(A, b, 'INN', model_unsup, v_mean=v_mean_unsup, v_std=v_std_unsup)
+    x_INN_unsup, num_iter_INN_unsup, norm_resids_unsup = apply(A, b, 'INN', model_unsup, v_mean=v_mean_unsup, v_std=v_std_unsup)
     stopwatch.stop()
     time_INN_unsup = stopwatch.elapsed_time
     stopwatch.reset()
@@ -144,7 +147,7 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
         epochs=num_epochs_NN,
     )
     stopwatch.start()
-    x_MLP, num_iter_MLP = apply(
+    x_MLP, num_iter_MLP, norm_resids_MLP = apply(
         A, b, 'mlp', model_mlp, v_mean=v_mean_mlp, v_std=v_std_mlp
     )
     stopwatch.stop()
@@ -153,25 +156,26 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
 
     #note x, number of iterations and time of Jacobi preconditioner
     stopwatch.start()
-    x_jacobi, num_iter_jacobi = apply(A, b, 'jacobi')
+    x_jacobi, num_iter_jacobi, norm_resids_jacobi = apply(A, b, 'jacobi')
     stopwatch.stop()
     time_jacobi = stopwatch.elapsed_time
     stopwatch.reset()
 
     #note x, number of iterations and time of Gauss preconditioner
     stopwatch.start()
-    x_gauss, num_iter_gauss = apply(A, b, 'gauss')
+    x_gauss, num_iter_gauss, norm_resids_gauss = apply(A, b, 'gauss')
     stopwatch.stop()
     time_gauss = stopwatch.elapsed_time
     stopwatch.reset()
 
     #note x, number of iterations and time of Gauss preconditioner
     stopwatch.start()
-    x_no_p, num_iter_no_p = apply(A, b, 'no_p')
+    x_no_p, num_iter_no_p, norm_resids_no_p = apply(A, b, 'no_p')
     stopwatch.stop()
     time_no_p = stopwatch.elapsed_time
     stopwatch.reset()
 
+    # print numerical results
     print("comparison complete")
     print("STATS")
     print("*"*20)
@@ -184,6 +188,19 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     print(x_jacobi)
     print(x_gauss)
 
+    # plot convergence results
+    plt.plot(norm_resids_sup, label="Supervised INN")
+    plt.plot(norm_resids_unsup, label="Unsupervised INN")
+    plt.plot(norm_resids_MLP, label="MLP")
+    plt.plot(norm_resids_jacobi, label="Jacobi")
+    plt.plot(norm_resids_gauss, label="Gauss")
+    plt.plot(norm_resids_no_p, label="No Preconditioner")
+
+    plt.xlabel("Iteration")
+    plt.ylabel("Residual")
+    plt.title("Convergence Graph")
+    plt.legend()
+    plt.show()
+
 if __name__ == "__main__":
     comparing(n=11, num_epochs_INN=10, num_epochs_NN=0)
-    
