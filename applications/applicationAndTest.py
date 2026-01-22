@@ -58,6 +58,7 @@ def apply(
     epsilon=0.001,
     max_iter=10,
     random_state=0,
+    learned_step=0.5,
 ):
     torch.manual_seed(random_state)
     n, h = A.shape
@@ -75,6 +76,9 @@ def apply(
         if mode == 'inn' or mode == 'mlp':
             resid_norm = (resid.unsqueeze(0) - v_mean) / v_std
             gamma = model.forward(resid_norm).squeeze(0)
+            # Dampen learned update to avoid overshooting on out-of-distribution residuals.
+            scale = torch.norm(resid) / (torch.norm(gamma) + 1e-12)
+            gamma = gamma * min(learned_step, scale.item())
         elif mode == 'nn':
             gamma = model.forward(resid)
         elif mode == 'jacobi':
@@ -203,4 +207,4 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     plt.show()
 
 if __name__ == "__main__":
-    comparing(n=11, num_epochs_INN=10, num_epochs_NN=0)
+    comparing(n=11, num_epochs_INN=10, num_epochs_NN=10)
