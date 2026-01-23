@@ -29,7 +29,7 @@ class SubNet(nn.Module):
         params = self.net(x)
         s, t = params.chunk(2, dim=-1)
         # Widen clamp to allow learning small factors (Crucial for Poisson)
-        s = torch.tanh(s) * 10.0  
+        s = torch.tanh(s) 
         return s, t
 
 # --- 2. Coupling Layer (With Flip Support) ---
@@ -91,7 +91,7 @@ def train_supervised_inn(
     nx=4,
     ny=4,
     samples=20000,
-    n_layers=8,
+    n_layers=4,
     hidden_dim=256,
     epochs=100,
     lr=1e-3,
@@ -141,9 +141,9 @@ if __name__ == "__main__":
     # Config
     NX, NY = 11, 11
     SAMPLES = 20000      
-    LAYERS = 4
+    LAYERS = 8
     HIDDEN = 256
-    EPOCHS = 100
+    EPOCHS = 200
     LR = 1e-3
     BATCH_SIZE = 256      
 
@@ -218,5 +218,7 @@ if __name__ == "__main__":
         
         error = torch.nn.functional.mse_loss(pred_w, test_w)
         print(f"\nFinal Test MSE: {error.item():.8f}")
-        
+    
+        print("test_w=",test_w)
+        print("pred_w=",pred_w)
     print("Training complete. Use model(norm_v) to get w.")
