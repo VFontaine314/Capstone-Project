@@ -193,12 +193,13 @@ def comparing(n, num_epochs_INN, num_epochs_NN, model=None, random_state=0):
     print(x_gauss)
 
     # plot convergence results
-    plt.plot(norm_resids_sup, label="Supervised INN")
-    plt.plot(norm_resids_unsup, label="Unsupervised INN")
-    plt.plot(norm_resids_MLP, label="MLP")
-    plt.plot(norm_resids_jacobi, label="Jacobi")
-    plt.plot(norm_resids_gauss, label="Gauss")
-    plt.plot(norm_resids_no_p, label="No Preconditioner")
+    plt.plot(norm_resids_sup, color="tab:blue",    linestyle="-",  linewidth=2, label="Supervised INN")
+    plt.plot(norm_resids_unsup, color="tab:orange", linestyle="--", linewidth=2, label="Unsupervised INN")
+    plt.plot(norm_resids_MLP, color="tab:green",   linestyle="-.", linewidth=2, label="MLP")
+    plt.plot(norm_resids_jacobi, color="tab:red",    linestyle=":",  linewidth=2, label="Jacobi")
+    plt.plot(norm_resids_gauss, color="tab:purple", linestyle=(0, (3, 1, 1, 1)), linewidth=2, label="Gauss")
+    plt.plot(norm_resids_no_p, color="tab:brown",  linestyle=(0, (5, 2)), linewidth=2, label="No Preconditioner")
+
 
     plt.xlabel("Iteration")
     plt.ylabel("Residual")
