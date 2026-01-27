@@ -4,6 +4,7 @@ import torch.optim as optim
 import sys
 import os
 from torch.utils.data import DataLoader, TensorDataset
+import matplotlib.pyplot as plt
 
 # --- Import from data folder ---
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -103,52 +104,71 @@ class SupervisedMLP(nn.Module):
 
 
 def train_supervised_inn(
-    nx=4,
-    ny=4,
-    samples=20000,
-    n_layers=8,
-    hidden_dim=256,
-    epochs=100,
+    A_scipy,
+    samples=100000,
+    n_layers=4,
+    hidden_dim=121,
+    epochs=50,
     lr=1e-3,
-    batch_size=256,
-):
-    A_scipy, _ = poisson_gene(nx=nx, ny=ny)
+    batch_size=1000):
+    # 1. Get Dimension from A
+    #print(f"Generating Poisson Matrix ({nx}x{ny})...")
     dim = A_scipy.shape[0]
 
-    model = SupervisedINN(dim=dim, n_layers=n_layers, hidden_dim=hidden_dim)
-    model.double()
+    # 2. Generate Training Data
+    #print(f"Generating {samples} training vectors...")
+    v_train, w_train = gen_vec(dim=dim, samples=samples, A=A_scipy)
+    
+    # Convert to float64 (Double Precision is mandatory for Matrix Inversion)
+    v_train = v_train.double()
+    w_train = w_train.double()
 
+    # 3. Normalize Inputs (v)
+    # The network sees v_norm and tries to output w
+    v_mean = v_train.mean(dim=0, keepdim=True)
+    v_std = v_train.std(dim=0, keepdim=True) + 1e-6
+    v_train_norm = (v_train - v_mean) / v_std
+
+    #print(f"Data Normalized. Mean: {v_mean.mean():.4f}, Std: {v_std.mean():.4f}")
+
+    # Dataset & DataLoader
+    dataset = TensorDataset(v_train_norm, w_train)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    # Setup model
+    model = SupervisedINN(dim=dim, n_layers=n_layers, hidden_dim=hidden_dim)
+    model.double() # Move model to Float64
+    
     optimizer = optim.Adam(model.parameters(), lr=lr)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=5
-    )
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
     loss_fn = nn.MSELoss()
 
+    # --- Training ---
+    #print("Starting Supervised Training...")
     model.train()
+    avg_losses = []
     for _ in range(epochs):
         total_loss = 0.0
-        v_train, w_train = gen_vec(dim=dim, samples=samples, A=A_scipy)
-        v_train = v_train.double()
-        w_train = w_train.double()
-
-        v_mean = v_train.mean(dim=0, keepdim=True)
-        v_std = v_train.std(dim=0, keepdim=True) + 1e-6
-        v_train_norm = (v_train - v_mean) / v_std
-
-        dataset = TensorDataset(v_train_norm, w_train)
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
         for v_batch, w_batch in dataloader:
             optimizer.zero_grad()
+            
+            # Forward: Input (Residual v) -> Output (Correction w)
             w_pred = model(v_batch)
+            
             loss = loss_fn(w_pred, w_batch)
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
 
         avg_loss = total_loss / len(dataloader)
+        avg_losses.append(avg_loss)
         scheduler.step(avg_loss)
 
-    return model, v_mean, v_std, A_scipy
+        #if epoch % 10 == 0:
+            #lr_current = optimizer.param_groups[0]['lr']
+            #print(f"Epoch {epoch}: MSE Loss = {avg_loss:.8f}, LR = {lr_current:.2e}")
+
+    return model, v_mean, v_std, avg_losses
 
 
 def train_supervised_mlp(
@@ -201,76 +221,15 @@ def train_supervised_mlp(
 
 # --- Main Execution ---
 if __name__ == "__main__":
-    # Config
-    NX, NY = 11, 11
-    SAMPLES = 20000      
-    LAYERS = 4
-    HIDDEN = 256
-    EPOCHS = 100
-    LR = 1e-3
-    BATCH_SIZE = 256
+    # Train supervised INN model
+    A_scipy, _ = poisson_gene(nx=11, ny=11)
+    model, v_mean, v_std, avg_losses = train_supervised_inn(A_scipy=A_scipy, epochs=10)
 
-    # 1. Get Dimension from A
-    print(f"Generating Poisson Matrix ({NX}x{NY})...")
-    A_scipy, _ = poisson_gene(nx=NX, ny=NY)
-    DIM = A_scipy.shape[0]
-
-    # 2. Generate Training Data
-    print(f"Generating {SAMPLES} training vectors...")
-    v_train, w_train = gen_vec(dim=DIM, samples=SAMPLES, A=A_scipy)
-    
-    # Convert to float64 (Double Precision is mandatory for Matrix Inversion)
-    v_train = v_train.double()
-    w_train = w_train.double()
-
-    # 3. Normalize Inputs (v)
-    # The network sees v_norm and tries to output w
-    v_mean = v_train.mean(dim=0, keepdim=True)
-    v_std = v_train.std(dim=0, keepdim=True) + 1e-6
-    v_train_norm = (v_train - v_mean) / v_std
-
-    print(f"Data Normalized. Mean: {v_mean.mean():.4f}, Std: {v_std.mean():.4f}")
-
-    # Dataset & DataLoader
-    dataset = TensorDataset(v_train_norm, w_train)
-    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
-
-    # Setup model
-    model = SupervisedINN(dim=DIM, n_layers=LAYERS, hidden_dim=HIDDEN)
-    model.double() # Move model to Float64
-    
-    optimizer = optim.Adam(model.parameters(), lr=LR)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
-    loss_fn = nn.MSELoss()
-
-    # --- Training ---
-    print("Starting Supervised Training...")
-    model.train()
-    for epoch in range(EPOCHS):
-        total_loss = 0.0
-        for v_batch, w_batch in dataloader:
-            optimizer.zero_grad()
-            
-            # Forward: Input (Residual v) -> Output (Correction w)
-            w_pred = model(v_batch)
-            
-            loss = loss_fn(w_pred, w_batch)
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
-
-        avg_loss = total_loss / len(dataloader)
-        scheduler.step(avg_loss)
-
-        if epoch % 10 == 0:
-            lr_current = optimizer.param_groups[0]['lr']
-            print(f"Epoch {epoch}: MSE Loss = {avg_loss:.8f}, LR = {lr_current:.2e}")
-
-    # --- Verification ---
+    # Calculate test error
     model.eval()
     with torch.no_grad():
         # Generate a fresh test case
-        test_w = torch.randn(1, DIM).double()
+        test_w = torch.randn(1, A_scipy.shape[0]).double()
         test_v = torch.matmul(test_w, torch.tensor(A_scipy.toarray()).double().t())
         
         # IMPORTANT: You must normalize the input v just like training
@@ -281,5 +240,11 @@ if __name__ == "__main__":
         
         error = torch.nn.functional.mse_loss(pred_w, test_w)
         print(f"\nFinal Test MSE: {error.item():.8f}")
-        
-    print("Training complete. Use model(norm_v) to get w.")
+    
+    # Plot training loss graphs
+    plt.plot(avg_losses)
+    plt.xlabel("Epoch")
+    plt.ylabel("MSE Loss")
+    plt.title("Supervised Training Graph")
+    plt.legend()
+    plt.show()
